@@ -56,7 +56,8 @@ bool __fastcall countTerrainCoverageHooked(const game::CMidgardMapBlock* thisptr
     }
 
     const auto& terrains = TerrainCategories::get();
-    const auto& access = TerrainCountMapApi::get().access;
+    const auto access = TerrainCountMapApi::get().access;
+
 
     return true;
 }
