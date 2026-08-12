@@ -58,6 +58,13 @@ bool __fastcall countTerrainCoverageHooked(const game::CMidgardMapBlock* thisptr
     const auto& terrains = TerrainCategories::get();
     const auto access = TerrainCountMapApi::get().access;
 
+    *access(terrainCoverage, terrains.human) += human;
+    *access(terrainCoverage, terrains.dwarf) += dwarf;
+    *access(terrainCoverage, terrains.heretic) += heretic;
+    *access(terrainCoverage, terrains.undead) += undead;
+    *access(terrainCoverage, terrains.neutral) += neutral;
+    *access(terrainCoverage, terrains.elf) += elf;
+    *plainTiles += counted;
 
     return true;
 }
