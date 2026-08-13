@@ -1,0 +1,66 @@
+name: mss32-full
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - ci/t20-build
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Deps + mss32.dll (MSVC x86 Release)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Build Detours + libs + mss32
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
+          Import-Module (Join-Path $vs 'Common7\Tools\Microsoft.VisualStudio.DevShell.dll')
+          Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation -DevCmdArguments '-arch=x86 -host_arch=x64 -no_logo'
+
+          $env:DETOURS_TARGET_PROCESSOR = 'X86'
+          Push-Location Detours\src; nmake; Pop-Location
+          if (-not (Test-Path Detours\lib.X86\detours.lib)) { Write-Error 'detours.lib not produced'; exit 1 }
+          New-Item -ItemType Directory -Force -Path mss32\Lib | Out-Null
+          Copy-Item Detours\lib.X86\detours.* mss32\Lib\ -Force
+
+          $env:_CL_ = '/WX- /FS /D_SILENCE_ALL_MS_EXT_DEPRECATION_WARNINGS'
+          msbuild mss32\mss32.sln '/t:LibStatic;ScenarioGenerator' `
+            /p:Configuration=Release /p:Platform=x86 /p:PlatformToolset=v143 `
+            /p:MultiProcessorCompilation=true /p:MinimalRebuild=false /m /nologo /verbosity:minimal
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $env:DISCIPLES2_PATH = "$env:GITHUB_WORKSPACE\out\"
+          New-Item -ItemType Directory -Force -Path $env:DISCIPLES2_PATH | Out-Null
+          msbuild mss32\mss32.vcxproj `
+            /t:Build /p:Configuration=Release /p:Platform=Win32 /p:PlatformToolset=v143 `
+            /p:SolutionDir=$env:GITHUB_WORKSPACE\mss32\ `
+            /p:MultiProcessorCompilation=false /p:UseMultiToolTask=true `
+            /m /nologo /clp:Summary /verbosity:minimal 2>&1 | Tee-Object build.log
+          exit $LASTEXITCODE
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build.log
+          path: build.log
+          if-no-files-found: ignore
+
+      - name: Upload mss32.dll
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mss32.dll
+          path: out/mss32.dll
+          if-no-files-found: error
