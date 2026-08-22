@@ -27,6 +27,8 @@
 #include "citystackinterf.h"
 #include "commandmsg.h"
 #include "condinterf.h"
+#include "currency.h"
+#include "trainingcostapi.h"
 #include "d2osexception.h"
 #include "ddcarryoveritems.h"
 #include "editboxinterf.h"
@@ -181,6 +183,7 @@ struct OriginalFunctions
     game::CMidServerLogicApi::Api::CheckEventConditions checkEventConditions;
     game::CMidServerLogicApi::Api::ExecuteEventEffects executeEventEffects;
     game::CMidServerLogicApi::Api::ProcessZeroTurn processZeroTurn;
+    game::CMidServerLogicApi::Api::CreateImportedLeader createImportedLeader;
 
     game::ITestConditionVftable::Test testFrequency;
     game::ITestConditionVftable::Test testLocation;
@@ -247,6 +250,13 @@ struct OriginalFunctions
     game::VisitorApi::Api::CreateStackDestroyed createStackDestroyed;
 
     game::BattleMsgDataApi::Api::CanPerformAttackOnUnitWithStatusCheck canPerformAttackOnUnitWithStatusCheck;
+
+    game::BankApi::Api::Copy bankCopy;
+    game::TrainingCostApi::Api::TrainUnitAtTrainer trainUnitAtTrainer;
+    game::TrainingCostApi::Api::TrainUiAction trainUiAction;
+    game::TrainingCostApi::Api::CanAffordTrainCheck canAffordTrainCheck;
+    game::TrainingCostApi::Api::ApplyTrainAction applyTrainAction;
+    game::TrainCampTextApi::Api::SetPartyTrainingText setPartyTrainingText;
 };
 
 OriginalFunctions& getOriginalFunctions();

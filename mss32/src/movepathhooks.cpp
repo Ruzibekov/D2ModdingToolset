@@ -20,6 +20,7 @@
 #include "movepathhooks.h"
 #include "dynamiccast.h"
 #include "game.h"
+#include "gameutils.h"
 #include "gameimages.h"
 #include "gamesettings.h"
 #include "groundcat.h"
@@ -31,6 +32,7 @@
 #include "midgardmap.h"
 #include "midgardobjectmap.h"
 #include "midgardplan.h"
+#include "midruin.h"
 #include "midstack.h"
 #include "midunit.h"
 #include "multilayerimg.h"
@@ -77,7 +79,8 @@ static void fillMovementTargetContext(sol::table& movementContext,
                                       const game::IMidgardObjectMap* objectMap,
                                       const game::CMidgardPlan* plan,
                                       const game::CMqPoint* pathEnd,
-                                      const game::CMidgardID* targetStackId)
+                                      const game::CMidgardID* targetStackId,
+                                      const game::CMidStack* stack)
 {
     using namespace game;
 
@@ -95,12 +98,13 @@ static void fillMovementTargetContext(sol::table& movementContext,
         }
     }
 
-    //
-    // No stack target.
-    // Check the destination tile for other interactive objects.
-    // Only the target id is exposed to Lua. The corresponding View
-    // can be obtained later using the existing API.
-    //
+    if (!pathEnd || !plan) {
+        return;
+    }
+    if (pathEnd->x < 0 || pathEnd->y < 0 || pathEnd->x >= plan->mapSize
+        || pathEnd->y >= plan->mapSize) {
+        return;
+    }
 
     const auto& planApi = CMidgardPlanApi::get();
 
@@ -136,6 +140,11 @@ static void fillMovementTargetContext(sol::table& movementContext,
                 return;
             }
         }
+
+        if (const auto* ruin = hooks::getRuinAtOrAdjacent(objectMap, plan, pathEnd, stack)) {
+            movementContext["targetId"] = bindings::IdView(ruin->id);
+            return;
+        }
     }
 
     //
@@ -160,12 +169,22 @@ void __stdcall showMovementPathHooked(const game::IMidgardObjectMap* objectMap,
     const auto& dynamicCast = RttiApi::get().dynamicCast;
     const auto& rtti = RttiApi::rtti();
 
+    if (!objectMap || !stackId) {
+        return;
+    }
+
     auto stackObj = objectMap->vftable->findScenarioObjectById(objectMap, stackId);
     auto stack = static_cast<const CMidStack*>(
         dynamicCast(stackObj, 0, rtti.IMidScenarioObjectType, rtti.CMidStackType, 0));
+    if (!stack) {
+        return;
+    }
 
     auto leaderObj = objectMap->vftable->findScenarioObjectById(objectMap, &stack->leaderId);
     auto leader = static_cast<const CMidUnit*>(leaderObj);
+    if (!leader || !leader->unitImpl) {
+        return;
+    }
     auto unitImpl = leader->unitImpl;
 
     auto stackLeader = fn.castUnitImplToStackLeader(unitImpl);
@@ -179,7 +198,14 @@ void __stdcall showMovementPathHooked(const game::IMidgardObjectMap* objectMap,
     const bool noble = fn.castUnitImplToNoble(unitImpl) != nullptr;
 
     auto soldier = fn.castUnitImplToSoldier(unitImpl);
+    if (!soldier) {
+        return;
+    }
     const bool waterOnly = soldier->vftable->getWaterOnly(soldier);
+
+    if (!lastReachablePoint) {
+        return;
+    }
 
     const CMqPoint* positionPtr{};
     bool pathLeadsToAction{};
@@ -189,17 +215,24 @@ void __stdcall showMovementPathHooked(const game::IMidgardObjectMap* objectMap,
     } else {
         positionPtr = lastReachablePoint;
 
-        targetStackId = fn.getBlockingPathNearbyStackId(objectMap, plan, stack, lastReachablePoint,
-                                                        pathEnd, 0);
+        const bool pathEndOnMap = pathEnd && plan && pathEnd->x >= 0 && pathEnd->y >= 0
+            && pathEnd->x < plan->mapSize && pathEnd->y < plan->mapSize;
+        if (pathEndOnMap) {
+            targetStackId = fn.getBlockingPathNearbyStackId(objectMap, plan, stack,
+                                                            lastReachablePoint, pathEnd, 0);
+        }
 
         pathLeadsToAction = targetStackId != nullptr;
 
-        if (!pathLeadsToAction) {
+        if (!pathLeadsToAction && pathEndOnMap) {
             CMqPoint entrance{};
             if (fn.getFortOrRuinEntrance(objectMap, plan, stack, pathEnd, &entrance)
                 && std::abs(lastReachablePoint->x - entrance.x) <= 1
                 && std::abs(lastReachablePoint->y - entrance.y) <= 1) {
-                pathLeadsToAction = true;
+                const CMidRuin* ruin = getRuinAtOrAdjacent(objectMap, plan, pathEnd, stack, true);
+                if (!ruin || ruin->looterId == emptyId) {
+                    pathLeadsToAction = true;
+                }
             }
         }
     }
@@ -417,7 +450,7 @@ void __stdcall showMovementPathHooked(const game::IMidgardObjectMap* objectMap,
                         movementContext["afterActionMovement"] = static_cast<int>(movementAfterAction);
 
                         fillMovementTargetContext(movementContext, objectMap, plan, pathEnd,
-                                                  targetStackId);
+                                                  targetStackId, stack);
 
                         sol::object result = (*movementActionPenaltyLua)(movementContext);
 

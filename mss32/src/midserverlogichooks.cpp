@@ -19,25 +19,33 @@
 
 #include "midserverlogichooks.h"
 #include "cmdmovestackendmsg.h"
+#include "d2list.h"
 #include "dynamiccast.h"
 #include "exchangeresourcesmsg.h"
+#include "game.h"
 #include "gameutils.h"
 #include "idset.h"
 #include "logutils.h"
+#include "midgardplan.h"
 #include "midgardscenariomap.h"
 #include "midplayer.h"
+#include "midruin.h"
 #include "midserver.h"
 #include "midserverlogic.h"
 #include "midsiteresourcemarket.h"
 #include "midstack.h"
+#include "usstackleader.h"
+#include "visitors.h"
 #include "netmsgcallbacks.h"
 #include "netmsgmapentryexchangeresourcesmsg.h"
 #include "netplayerinfo.h"
 #include "originalfunctions.h"
+#include "phasegamehooks.h"
 #include "racetype.h"
 #include "refreshinfo.h"
 #include "scenarioinfo.h"
 #include "settings.h"
+#include <cstdlib>
 #include "timer.h"
 #include "unitstovalidate.h"
 #include "unitutils.h"
@@ -49,6 +57,8 @@
 #include <sol/sol.hpp>
 #include <spdlog/spdlog.h>
 #include <string_view>
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -231,19 +241,65 @@ bool __fastcall stackMoveHooked(game::CMidServerLogic** thisptr,
     const ScopedTimer timer{std::string_view{message, result.size}, eventsPerformanceLog};
 #endif
 
+    auto objectMap = CMidServerLogicApi::get().getObjectMap(*thisptr);
+    const CMidStack* stackBefore = getStack(objectMap, stackId);
+    const int movementBefore = stackBefore ? static_cast<int>(stackBefore->movement) : -1;
+
+    if (startingPoint && endPoint && stackId) {
+        spdlog::info("[MOVE] {} ({},{})->({},{}) t={}", idToString(stackId), startingPoint->x,
+                     startingPoint->y, endPoint->x, endPoint->y, GetTickCount());
+    }
+
+    const bool stayOrNear = startingPoint && endPoint
+        && std::abs(startingPoint->x - endPoint->x) <= 1
+        && std::abs(startingPoint->y - endPoint->y) <= 1;
+
+    const CMidPlayer* mover = playerId ? getPlayer(objectMap, playerId) : nullptr;
+    const bool humanMover = mover && mover->isHuman;
+
+    bool lootedRuinBeforeMove = false;
+    if (stayOrNear && stackBefore && humanMover) {
+        if (auto plan = getMidgardPlan(objectMap)) {
+            lootedRuinBeforeMove = isLootedRuinInteraction(objectMap, plan, stackBefore, endPoint,
+                                                           startingPoint);
+        }
+    }
+
+    if (lootedRuinBeforeMove && movementPath && movementPath->head) {
+        using Node = ListNode<Pair<CMqPoint, int>>;
+        auto* head = movementPath->head;
+        for (auto* n = static_cast<Node*>(head->next); n != head;
+             n = static_cast<Node*>(n->next)) {
+            n->data.second = 0;
+        }
+    }
+
     auto result = getOriginalFunctions().stackMove(thisptr, playerId, movementPath, stackId,
                                                    startingPoint, endPoint);
 
-    // We can actually fall into battle message loop while processing stack move. This means that we
-    // will be holding player's CMidObjectLock until battle ends. Should not be a problem since the
-    // player will be switched to the battlefield and won't be able to interract with mid objects
-    // anyway (but if turned out that this is a problem, we can send CCmdMoveStackEndMsg right after
-    // CCmdBattleStartMsg and alike).
-    // The same applies to other effects like event triggers.
-    IMidMsgSender* sender = *thisptr;
-    CCmdMoveStackEndMsg message;
-    if (!sender->vftable->sendMessage(sender, &message, true)) {
-        spdlog::error(__FUNCTION__ ": failed to send CCmdMoveStackEndMsg");
+    if (result && lootedRuinBeforeMove && movementBefore >= 0) {
+        const CMidStack* stackAfter = getStack(objectMap, stackId);
+        if (stackAfter) {
+            const int spent = movementBefore - static_cast<int>(stackAfter->movement);
+            if (spent > 0) {
+                const bool refundOk = VisitorApi::get().changeStackMoveAllowance(stackId, -spent,
+                                                                                 objectMap, 1);
+                const CMidStack* stackRefunded = getStack(objectMap, stackId);
+                const int after = stackRefunded ? static_cast<int>(stackRefunded->movement) : -1;
+                spdlog::info("[LEFTOVER] refund spent={} before={} after={} ok={}", spent,
+                             movementBefore, after, refundOk);
+            }
+        }
+    }
+
+    IMidMsgSender* sender = thisptr ? *thisptr : nullptr;
+    if (sender && sender->vftable && sender->vftable->sendMessage) {
+        CCmdMoveStackEndMsg message;
+        if (!sender->vftable->sendMessage(sender, &message, true)) {
+            spdlog::error(__FUNCTION__ ": failed to send CCmdMoveStackEndMsg");
+        } else if (lootedRuinBeforeMove) {
+            spdlog::info("[LEFTOVER] endmsg after restore");
+        }
     }
 
     return result;
@@ -630,4 +686,18 @@ void __fastcall processZeroTurnHooked(game::CMidServerLogic* thisptr,
     }
 }
 
+void __fastcall createImportedLeaderHooked(game::CMidServerLogic* thisptr,
+                                           int /*%edx*/,
+                                           std::uint32_t playerNetId)
+{
+    using namespace game;
+
+    auto objectMap{thisptr->coreData->objectMap};
+    auto scenarioInfo = getScenarioInfo(objectMap);
+    int turn = scenarioInfo->currentTurn;
+
+    if (turn == 0 || turn == 1 && thisptr->currentPlayerIndex != -1) {
+        getOriginalFunctions().createImportedLeader(thisptr, playerNetId);
+    }
+}
 } // namespace hooks
