@@ -308,6 +308,8 @@ call ..\buildDetours.bat ..\Detours
     <ClCompile Include="src\exchangeresourcesmsg.cpp" />
     <ClCompile Include="src\fonts.cpp" />
     <ClCompile Include="src\fontshooks.cpp" />
+    <ClCompile Include="src\forestspellapi.cpp" />
+    <ClCompile Include="src\forestspellhooks.cpp" />
     <ClCompile Include="src\formattedtext.cpp" />
     <ClCompile Include="src\gameimagedata.cpp" />
     <ClCompile Include="src\gamesettings.cpp" />
@@ -882,6 +884,9 @@ call ..\buildDetours.bat ..\Detours
     <ClInclude Include="include\eventeffectbase.h" />
     <ClInclude Include="include\fonts.h" />
     <ClInclude Include="include\fontshooks.h" />
+    <ClInclude Include="include\forestspellapi.h" />
+    <ClInclude Include="include\forestspellcontract.h" />
+    <ClInclude Include="include\forestspellhooks.h" />
     <ClInclude Include="include\functordispatchmemfunc3.h" />
     <ClInclude Include="include\gameversion.h" />
     <ClInclude Include="include\batattackhealhooks.h" />

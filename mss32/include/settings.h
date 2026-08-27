@@ -202,6 +202,7 @@ struct Settings
 
     bool cacheLeaderDataOnTransform{false};
     bool fogSpellHideEnemyVision{false};
+    bool forestSpellMineAdjacent{true};
 };
 
 const Settings& baseGameSettings();

@@ -105,6 +105,8 @@
 #include "exchangeinterfhooks.h"
 #include "fonts.h"
 #include "fontshooks.h"
+#include "forestspellapi.h"
+#include "forestspellhooks.h"
 #include "fortcategory.h"
 #include "fortification.h"
 #include "gameutils.h"
@@ -789,6 +791,20 @@ static Hooks getGameHooks()
         hooks.emplace_back(HookInfo{CMidServerLogicApi::vftable().midMsgSender->sendObjectsChanges,
                                     midServerLogicSendObjectsChangesHooked,
                                     (void**)&orig.midServerLogicSendObjectsChanges});
+    }
+
+    {
+        const auto& forestSpell = forestSpellApi();
+        if (forestSpell.isPositionContainsObjects) {
+            hooks.emplace_back(HookInfo{(void*)forestSpell.isPositionContainsObjects,
+                                        isPositionContainsObjectsHooked,
+                                        (void**)&originalIsPositionContainsObjects});
+        }
+        if (forestSpell.collectTiles) {
+            hooks.emplace_back(HookInfo{(void*)forestSpell.collectTiles,
+                                        collectChangeTerrainTilesHooked,
+                                        (void**)&originalCollectTiles});
+        }
     }
 
     return hooks;

@@ -1235,6 +1235,12 @@
     <ClCompile Include="src\fontshooks.cpp">
       <Filter>hooks</Filter>
     </ClCompile>
+    <ClCompile Include="src\forestspellapi.cpp">
+      <Filter>hooks</Filter>
+    </ClCompile>
+    <ClCompile Include="src\forestspellhooks.cpp">
+      <Filter>hooks</Filter>
+    </ClCompile>
     <ClCompile Include="src\midgardmapfog.cpp">
       <Filter>game</Filter>
     </ClCompile>
@@ -3612,6 +3618,15 @@
       <Filter>game</Filter>
     </ClInclude>
     <ClInclude Include="include\fontshooks.h">
+      <Filter>hooks</Filter>
+    </ClInclude>
+    <ClInclude Include="include\forestspellapi.h">
+      <Filter>hooks</Filter>
+    </ClInclude>
+    <ClInclude Include="include\forestspellcontract.h">
+      <Filter>hooks</Filter>
+    </ClInclude>
+    <ClInclude Include="include\forestspellhooks.h">
       <Filter>hooks</Filter>
     </ClInclude>
     <ClInclude Include="include\midgardmapfog.h">
